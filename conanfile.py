@@ -4,10 +4,9 @@ import os
 
 class CerealConan(ConanFile):
     name = "cereal"
-    version = "1.2.2"
+    version = "2.6.2"
     license = "<Put the package license here>"
     url = "<Package recipe repository url here, for issues about the package>"
-    settings = "os", "compiler", "build_type", "arch"
     generators = "cmake"
     exports_sources = "src/*"
 

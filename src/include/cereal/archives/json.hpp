@@ -29,8 +29,8 @@
 #ifndef CEREAL_ARCHIVES_JSON_HPP_
 #define CEREAL_ARCHIVES_JSON_HPP_
 
-#include <cereal/cereal.hpp>
-#include <cereal/details/util.hpp>
+#include "cereal/cereal.hpp"
+#include "cereal/details/util.hpp"
 
 namespace cereal
 {
@@ -46,11 +46,21 @@ namespace cereal
   throw ::cereal::RapidJSONException("rapidjson internal assertion failure: " #x); }
 #endif // RAPIDJSON_ASSERT
 
-#include <cereal/external/rapidjson/prettywriter.h>
-#include <cereal/external/rapidjson/ostreamwrapper.h>
-#include <cereal/external/rapidjson/istreamwrapper.h>
-#include <cereal/external/rapidjson/document.h>
-#include <cereal/external/base64.hpp>
+// Enable support for parsing of nan, inf, -inf
+#ifndef CEREAL_RAPIDJSON_WRITE_DEFAULT_FLAGS
+#define CEREAL_RAPIDJSON_WRITE_DEFAULT_FLAGS kWriteNanAndInfFlag
+#endif
+
+// Enable support for parsing of nan, inf, -inf
+#ifndef CEREAL_RAPIDJSON_PARSE_DEFAULT_FLAGS
+#define CEREAL_RAPIDJSON_PARSE_DEFAULT_FLAGS kParseFullPrecisionFlag | kParseNanAndInfFlag
+#endif
+
+#include "cereal/external/rapidjson/prettywriter.h"
+#include "cereal/external/rapidjson/ostreamwrapper.h"
+#include "cereal/external/rapidjson/istreamwrapper.h"
+#include "cereal/external/rapidjson/document.h"
+#include "cereal/external/base64.hpp"
 
 #include <limits>
 #include <sstream>
@@ -92,8 +102,8 @@ namespace cereal
   {
     enum class NodeType { StartObject, InObject, StartArray, InArray };
 
-    using WriteStream = rapidjson::OStreamWrapper;
-    using JSONWriter = rapidjson::Writer<WriteStream>;
+    using WriteStream = CEREAL_RAPIDJSON_NAMESPACE::OStreamWrapper;
+    using JSONWriter = CEREAL_RAPIDJSON_NAMESPACE::PrettyWriter<WriteStream>;
 
     public:
       /*! @name Common Functionality
@@ -108,7 +118,7 @@ namespace cereal
           static Options Default(){ return Options(); }
 
           //! Default options with no indentation
-          static Options NoIndent(){ return Options( std::numeric_limits<double>::max_digits10, IndentChar::space, 0 ); }
+          static Options NoIndent(){ return Options( JSONWriter::kDefaultMaxDecimalPlaces, IndentChar::space, 0 ); }
 
           //! The character to use for indenting
           enum class IndentChar : char
@@ -124,7 +134,7 @@ namespace cereal
               @param indentChar The type of character to indent with
               @param indentLength The number of indentChar to use for indentation
                              (0 corresponds to no indentation) */
-          explicit Options( int precision = std::numeric_limits<double>::max_digits10,
+          explicit Options( int precision = JSONWriter::kDefaultMaxDecimalPlaces,
                             IndentChar indentChar = IndentChar::space,
                             unsigned int indentLength = 4 ) :
             itsPrecision( precision ),
@@ -142,20 +152,20 @@ namespace cereal
       /*! @param stream The stream to output to.
           @param options The JSON specific options to use.  See the Options struct
                          for the values of default parameters */
-      JSONOutputArchive(std::ostream & stream, Options const & options = Options::NoIndent() ) :
+      JSONOutputArchive(std::ostream & stream, Options const & options = Options::Default() ) :
         OutputArchive<JSONOutputArchive>(this),
         itsWriteStream(stream),
         itsWriter(itsWriteStream),
         itsNextName(nullptr)
       {
         itsWriter.SetMaxDecimalPlaces( options.itsPrecision );
-        //itsWriter.SetIndent( options.itsIndentChar, options.itsIndentLength );
+        itsWriter.SetIndent( options.itsIndentChar, options.itsIndentLength );
         itsNameCounter.push(0);
         itsNodeStack.push(NodeType::StartObject);
       }
 
       //! Destructor, flushes the JSON
-      ~JSONOutputArchive()
+      ~JSONOutputArchive() CEREAL_NOEXCEPT
       {
         if (itsNodeStack.top() == NodeType::InObject)
           itsWriter.EndObject();
@@ -238,7 +248,7 @@ namespace cereal
       //! Saves a double to the current node
       void saveValue(double d)              { itsWriter.Double(d);                                                       }
       //! Saves a string to the current node
-      void saveValue(std::string const & s) { itsWriter.String(s.c_str(), static_cast<rapidjson::SizeType>( s.size() )); }
+      void saveValue(std::string const & s) { itsWriter.String(s.c_str(), static_cast<CEREAL_RAPIDJSON_NAMESPACE::SizeType>( s.size() )); }
       //! Saves a const char * to the current node
       void saveValue(char const * s)        { itsWriter.String(s);                                                       }
       //! Saves a nullptr to the current node
@@ -402,11 +412,11 @@ namespace cereal
   class JSONInputArchive : public InputArchive<JSONInputArchive>, public traits::TextArchive
   {
     private:
-      using ReadStream = rapidjson::IStreamWrapper;
-      typedef rapidjson::GenericValue<rapidjson::UTF8<>> JSONValue;
+      using ReadStream = CEREAL_RAPIDJSON_NAMESPACE::IStreamWrapper;
+      typedef CEREAL_RAPIDJSON_NAMESPACE::GenericValue<CEREAL_RAPIDJSON_NAMESPACE::UTF8<>> JSONValue;
       typedef JSONValue::ConstMemberIterator MemberIterator;
       typedef JSONValue::ConstValueIterator ValueIterator;
-      typedef rapidjson::Document::GenericValue GenericValue;
+      typedef CEREAL_RAPIDJSON_NAMESPACE::Document::GenericValue GenericValue;
 
     public:
       /*! @name Common Functionality
@@ -420,12 +430,14 @@ namespace cereal
         itsNextName( nullptr ),
         itsReadStream(stream)
       {
-        itsDocument.ParseStream<0>(itsReadStream);
+        itsDocument.ParseStream<>(itsReadStream);
         if (itsDocument.IsArray())
           itsIteratorStack.emplace_back(itsDocument.Begin(), itsDocument.End());
         else
           itsIteratorStack.emplace_back(itsDocument.MemberBegin(), itsDocument.MemberEnd());
       }
+
+      ~JSONInputArchive() CEREAL_NOEXCEPT = default;
 
       //! Loads some binary data, encoded as a base64 string
       /*! This will automatically start and finish a node to load the data, and can be called directly by
@@ -465,11 +477,17 @@ namespace cereal
 
           Iterator(MemberIterator begin, MemberIterator end) :
             itsMemberItBegin(begin), itsMemberItEnd(end), itsIndex(0), itsType(Member)
-          { }
+          {
+            if( std::distance( begin, end ) == 0 )
+              itsType = Null_;
+          }
 
           Iterator(ValueIterator begin, ValueIterator end) :
             itsValueItBegin(begin), itsValueItEnd(end), itsIndex(0), itsType(Value)
-          { }
+          {
+            if( std::distance( begin, end ) == 0 )
+              itsType = Null_;
+          }
 
           //! Advance to the next node
           Iterator & operator++()
@@ -485,7 +503,7 @@ namespace cereal
             {
               case Value : return itsValueItBegin[itsIndex];
               case Member: return itsMemberItBegin[itsIndex].value;
-              default: throw cereal::Exception("Invalid Iterator Type!");
+              default: throw cereal::Exception("JSONInputArchive internal error: null or empty iterator to object or array!");
             }
           }
 
@@ -522,7 +540,7 @@ namespace cereal
           MemberIterator itsMemberItBegin, itsMemberItEnd; //!< The member iterator (object)
           ValueIterator itsValueItBegin, itsValueItEnd;    //!< The value iterator (array)
           size_t itsIndex;                                 //!< The current index of this iterator
-          enum Type {Value, Member, Null_} itsType;    //!< Whether this holds values (array) or members (objects) or nothing
+          enum Type {Value, Member, Null_} itsType;        //!< Whether this holds values (array) or members (objects) or nothing
       };
 
       //! Searches for the expectedName node if it doesn't match the actualName
@@ -707,7 +725,7 @@ namespace cereal
       const char * itsNextName;               //!< Next name set by NVP
       ReadStream itsReadStream;               //!< Rapidjson write stream
       std::vector<Iterator> itsIteratorStack; //!< 'Stack' of rapidJSON iterators
-      rapidjson::Document itsDocument;        //!< Rapidjson document
+      CEREAL_RAPIDJSON_NAMESPACE::Document itsDocument; //!< Rapidjson document
   };
 
   // ######################################################################

@@ -38,14 +38,13 @@
 #include <cstddef>
 #include <cstdint>
 #include <functional>
-
 #include <map>
 #include <any>
 
-#include <cereal/macros.hpp>
-#include <cereal/details/traits.hpp>
-#include <cereal/details/helpers.hpp>
-#include <cereal/types/base_class.hpp>
+#include "cereal/macros.hpp"
+#include "cereal/details/traits.hpp"
+#include "cereal/details/helpers.hpp"
+#include "cereal/types/base_class.hpp"
 
 namespace cereal
 {
@@ -236,46 +235,49 @@ namespace cereal
   template<class ArchiveType, std::uint32_t Flags = 0>
   class OutputArchive : public detail::OutputArchiveBase
   {
-  private:
+	//START MV PATCH
+    private:
 	  std::map<std::string, std::any> storage;
-  public:
-	  template <class T, class ... Types> inline
-		  ArchiveType & add(NameValuePair<T> &pair)
-	  {
-		  storage[pair.name] = pair.value;
-		  return *self;
-	  }
-
-	  template <class T, class ... Types> inline
-		  ArchiveType & add(NameValuePair<T> &pair, Types && ... args)
-	  {
-		  storage[pair.name] = pair.value;
-		  self->add(std::forward<Types>(args)...);
-		  return *self;
-	  }
-
-	  template <class T, class ... Types> inline
-		  ArchiveType & extract(NameValuePair<T> &pair)
-	  {
-		  auto found = storage.find(pair.name);
-		  if (found != storage.end())
-			  pair.value = std::any_cast<T>(found->second);
-
-		  return *self;
-	  }
-
-	  template <class T, class ... Types> inline
-		  ArchiveType & extract(NameValuePair<T> &pair, Types && ... args)
-	  {
-		  auto found = storage.find(pair.name);
-		  if (found != storage.end())
-			  pair.value = std::any_cast<T>(found->second);
-
-		  self->extract(std::forward<Types>(args)...);
-		  return *self;
-	  }
-
     public:
+
+		template <class T, class ... Types> inline
+			ArchiveType & add(NameValuePair<T> &pair)
+		{
+			storage[pair.name] = pair.value;
+			return *self;
+		}
+
+		template <class T, class ... Types> inline
+			ArchiveType & add(NameValuePair<T> &pair, Types && ... args)
+		{
+			storage[pair.name] = pair.value;
+			self->add(std::forward<Types>(args)...);
+			return *self;
+		}
+
+		template <class T, class ... Types> inline
+			ArchiveType & extract(NameValuePair<T> &pair)
+		{
+			auto found = storage.find(pair.name);
+			if (found != storage.end())
+				pair.value = std::any_cast<T>(found->second);
+
+			return *self;
+		}
+
+		template <class T, class ... Types> inline
+			ArchiveType & extract(NameValuePair<T> &pair, Types && ... args)
+		{
+			auto found = storage.find(pair.name);
+			if (found != storage.end())
+				pair.value = std::any_cast<T>(found->second);
+
+			self->extract(std::forward<Types>(args)...);
+			return *self;
+		}
+
+	  //END MV PATCH
+  public:
       //! Construct the output archive
       /*! @param derived A pointer to the derived ArchiveType (pass this from the derived archive) */
       OutputArchive(ArchiveType * const derived) : self(derived), itsCurrentPointerId(1), itsCurrentPolymorphicTypeId(1)
@@ -296,6 +298,20 @@ namespace cereal
           Functionality that mirrors the syntax for Boost.  This is useful if you are transitioning
           a large project from Boost to cereal.  The preferred interface for cereal is using operator(). */
       //! @{
+
+      //! Indicates this archive is not intended for loading
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_loading::value) to disable behavior specific to loading, until 
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_loading = std::false_type;
+
+      //! Indicates this archive is intended for saving
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_saving::value) to enable behavior specific to loading, until 
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_saving = std::true_type;
 
       //! Serializes passed in data
       /*! This is a boost compatability layer and is not the preferred way of using
@@ -518,6 +534,7 @@ namespace cereal
       {
         static const auto hash = std::type_index(typeid(T)).hash_code();
         const auto insertResult = itsVersionedTypes.insert( hash );
+        const auto lock = detail::StaticObject<detail::Versions>::lock();
         const auto version =
           detail::StaticObject<detail::Versions>::getInstance().find( hash, detail::Version<T>::version );
 
@@ -625,6 +642,7 @@ namespace cereal
   template<class ArchiveType, std::uint32_t Flags = 0>
   class InputArchive : public detail::InputArchiveBase
   {
+	  //START MV PATCH
   private:
 	  std::map<std::string, std::any> storage;
   public:
@@ -663,6 +681,8 @@ namespace cereal
 		  self->extract(std::forward<Types>(args)...);
 		  return *self;
 	  }
+	  //END MV PATCH
+  public:
 
     public:
       //! Construct the output archive
@@ -690,6 +710,20 @@ namespace cereal
           Functionality that mirrors the syntax for Boost.  This is useful if you are transitioning
           a large project from Boost to cereal.  The preferred interface for cereal is using operator(). */
       //! @{
+
+      //! Indicates this archive is intended for loading
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_loading::value) to enable behavior specific to loading, until 
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_loading = std::true_type;
+
+      //! Indicates this archive is not intended for saving
+      /*! This ensures compatibility with boost archive types.  If you are transitioning
+          from boost, you can check this value within a member or external serialize function
+          (i.e., Archive::is_saving::value) to disable behavior specific to loading, until 
+          you can transition to split save/load or save_minimal/load_minimal functions */
+      using is_saving = std::false_type;
 
       //! Serializes passed in data
       /*! This is a boost compatability layer and is not the preferred way of using
@@ -939,12 +973,9 @@ namespace cereal
           return lookupResult->second;
         else // need to load
         {
-          std::uint32_t version = 0;
-		  try {
-			  process(make_nvp<ArchiveType>("cereal_class_version", version));
-		  } catch (...) {
-			  //shut the fuck up, this is fine.
-		  }
+          std::uint32_t version;
+
+          process( make_nvp<ArchiveType>("cereal_class_version", version) );
           itsVersionedTypes.emplace_hint( lookupResult, hash, version );
 
           return version;
@@ -1037,6 +1068,6 @@ namespace cereal
 } // namespace cereal
 
 // This include needs to come after things such as binary_data, make_nvp, etc
-#include <cereal/types/common.hpp>
+#include "cereal/types/common.hpp"
 
 #endif // CEREAL_CEREAL_HPP_
