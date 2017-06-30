@@ -9,14 +9,14 @@ class CerealConan(ConanFile):
     url = "<Package recipe repository url here, for issues about the package>"
     settings = "os", "compiler", "build_type", "arch"
     generators = "cmake"
+    exports_sources = "src/*"
 
     def source(self):
-        tools.download("https://github.com/USCiLab/cereal/archive/v1.2.2.tar.gz", "cereal.tar.gz")
-        tools.unzip("cereal.tar.gz")
+        pass
 
     def package(self):
-        self.copy("*.hpp", dst="include", src="cereal-1.2.2/include")
-        self.copy("*.h", dst="include", src="cereal-1.2.2/include")
+        self.copy("*.hpp", dst="include", src="src/include")
+        self.copy("*.h", dst="include", src="src/include")
 
     def package_info(self):
         self.cpp_info.libs = []
