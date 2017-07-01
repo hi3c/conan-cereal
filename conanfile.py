@@ -2,11 +2,11 @@ from conans import ConanFile, CMake, tools
 import os
 
 
-SHA1="a3c6ec47797f7f65403bdf5e9acadb18daa60586"
+SHA1="67f742f3607bd3c65eb4911dc0dee659703d2275"
 
 class CerealConan(ConanFile):
     name = "cereal"
-    version = "a3c6ec4"
+    version = "67f742f"
     license = "<Put the package license here>"
     url = "<Package recipe repository url here, for issues about the package>"
     generators = "cmake"
