@@ -8,7 +8,7 @@ username = os.getenv("CONAN_USERNAME", "hi3c")
 
 class CerealTestConan(ConanFile):
     settings = "os", "compiler", "build_type", "arch"
-    requires = "cereal/7a58c34@%s/%s" % (username, channel)
+    requires = "cereal/67f742f@%s/%s" % (username, channel)
     generators = "cmake"
 
     def build(self):
